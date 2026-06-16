@@ -3,7 +3,7 @@ import {DualTitleTranslatorSettings} from "../main";
 import deeplTranslate from "./deeplTranslate";
 import languageDetect from "./language-detect";
 
-type titleRenameProps = {
+export type titleRenameProps = {
 	app: App;
 	settings: DualTitleTranslatorSettings;
 	saveSettings?: () => Promise<void>;
@@ -48,8 +48,8 @@ export async function titleRename({app, settings, saveSettings, setRenaming}:tit
 
 			const translatedName = await deeplTranslate({
 				text: fileName,
-				targetLang: langCode.secondLanguage,
-				sourceLang: langCode.firstLanguage,
+				targetLang: langCode.targetLanguage,
+				sourceLang: langCode.sourceLanguage,
 				apiKey: settings.api
 			});
 

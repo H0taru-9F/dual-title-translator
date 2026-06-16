@@ -2,12 +2,13 @@ import {App, Notice, Plugin, PluginSettingTab, Setting, TFile,} from 'obsidian';
 import {titleRename} from "./src/titleRename";
 import {LangCode} from "./src/language-detect/types";
 import {LANGUAGES} from "./src/language-detect/constants";
-import notTranslated from "./src/notTranslated";
-import {FolderSuggest} from "./src/FolderSuggest";
+import notTranslated from "./src/utils/notTranslated";
+import {FolderSuggest} from "./src/utils/FolderSuggest";
+import {textRename} from "./src/textRename";
 
 export type LanguagesCode = {
-	firstLanguage: LangCode | "AUTO";
-	secondLanguage: LangCode;
+	sourceLanguage: LangCode | "AUTO";
+	targetLanguage: LangCode;
 }
 
 export interface DualTitleTranslatorSettings {
@@ -16,6 +17,7 @@ export interface DualTitleTranslatorSettings {
 	untranslatableNames: string[];
 	historySeparators: string[];
 	selectedLanguages: LanguagesCode;
+	isAutoTitleTranslate:boolean;
 }
 
 const DEFAULT_SETTINGS: DualTitleTranslatorSettings = {
@@ -24,9 +26,10 @@ const DEFAULT_SETTINGS: DualTitleTranslatorSettings = {
 	untranslatableNames: [],
 	historySeparators: [],
 	selectedLanguages:{
-		firstLanguage: "AUTO",
-		secondLanguage: "EN",
-	}
+		sourceLanguage: "AUTO",
+		targetLanguage: "EN",
+	},
+	isAutoTitleTranslate: true,
 }
 
 export default class DualTitleTranslator extends Plugin {
@@ -38,6 +41,7 @@ export default class DualTitleTranslator extends Plugin {
 
 		this.registerEvent(
 			this.app.vault.on('rename',async (file: TFile) => {
+				if (!this.settings.isAutoTitleTranslate) return;
 				if (this.isRenaming) return;
 				if (file.extension === 'md') {
 					if (file.path === this.app.workspace.getActiveFile()?.path) {
@@ -56,6 +60,42 @@ export default class DualTitleTranslator extends Plugin {
 				}
 			})
 		);
+
+		this.addCommand({
+			id: 'title-translate',
+			name: 'Translate title',
+			callback: async () => {
+				if (this.isRenaming) return;
+				const activeFile = this.app.workspace.getActiveFile();
+				if (activeFile?.extension === 'md') {
+					await titleRename({
+						app:this.app,
+						settings:this.settings,
+						saveSettings: () => this.saveSettings(),
+						setRenaming: (value) => this.isRenaming = value
+					})
+				} else {
+					new Notice('Please select a markdown file to translate its title.');
+				}
+			}
+		})
+
+		this.addCommand({
+			id: 'text-translate',
+			name: 'Translate text',
+			callback: async () => {
+				const activeFile = this.app.workspace.getActiveFile();
+				if (activeFile?.extension === 'md') {
+					await textRename({
+						app:this.app,
+						settings:this.settings,
+						saveSettings: () => this.saveSettings()
+					})
+				} else {
+					new Notice('Please select a markdown file to translate its text.');
+				}
+			}
+		})
 
 		this.addSettingTab(new DualTitleTranslatorSettingTab(this.app, this));
 
@@ -130,9 +170,9 @@ class DualTitleTranslatorSettingTab extends PluginSettingTab {
 				})
 
 				dropdown
-					.setValue(this.plugin.settings.selectedLanguages.firstLanguage)
+					.setValue(this.plugin.settings.selectedLanguages.sourceLanguage)
 					.onChange(async (value) => {
-						this.plugin.settings.selectedLanguages.firstLanguage = value as LangCode;
+						this.plugin.settings.selectedLanguages.sourceLanguage = value as LangCode;
 						await this.plugin.saveSettings();
 					});
 			})
@@ -146,9 +186,9 @@ class DualTitleTranslatorSettingTab extends PluginSettingTab {
 				});
 
 				dropdown
-					.setValue(this.plugin.settings.selectedLanguages.secondLanguage)
+					.setValue(this.plugin.settings.selectedLanguages.targetLanguage)
 					.onChange(async (value) => {
-						this.plugin.settings.selectedLanguages.secondLanguage = value as LangCode;
+						this.plugin.settings.selectedLanguages.targetLanguage = value as LangCode;
 						await this.plugin.saveSettings();
 					});
 			})
@@ -176,6 +216,16 @@ class DualTitleTranslatorSettingTab extends PluginSettingTab {
 					this.display();
 				});
 			});
+
+		new Setting(containerEl)
+			.setName('Auto translate titles')
+			.setDesc('Automatically translate file names on rename')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.isAutoTitleTranslate)
+				.onChange(async (value) => {
+					this.plugin.settings.isAutoTitleTranslate = value;
+					await this.plugin.saveSettings();
+				}));
 
 		let newFolderPath = "";
 		new Setting(containerEl)

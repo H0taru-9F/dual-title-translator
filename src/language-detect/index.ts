@@ -9,17 +9,17 @@ function detectScript(text: string): Script {
 	return 'other';
 }
 
-export default function languageDetect(fileName:string, languages:LanguagesCode):LanguagesCode {
-	if (languages.firstLanguage == "AUTO") return {
-		firstLanguage:"AUTO",
-		secondLanguage:languages.secondLanguage
+export default function languageDetect(text:string, languages:LanguagesCode):LanguagesCode {
+	if (languages.sourceLanguage == "AUTO") return {
+		sourceLanguage:"AUTO",
+		targetLanguage:languages.targetLanguage
 	}
 
-	const script = detectScript(fileName);
+	const script = detectScript(text);
 
 	const languagesByCode = [
-		LANGUAGES[languages.firstLanguage],
-		LANGUAGES[languages.secondLanguage],
+		LANGUAGES[languages.sourceLanguage],
+		LANGUAGES[languages.targetLanguage],
 	];
 
 	const matches = languagesByCode.filter(lang => lang.script === script);
@@ -31,22 +31,22 @@ export default function languageDetect(fileName:string, languages:LanguagesCode)
 		const from = languagesByCode
 			.find(lang => lang.script === script)!.code
 
-		return {firstLanguage:from, secondLanguage:to}
+		return {sourceLanguage:from, targetLanguage:to}
 	}
 
 	if (matches.length === 2) {
-		const heuristicLang = detectLanguageHeuristic(fileName, script);
+		const heuristicLang = detectLanguageHeuristic(text, script);
 		const from = heuristicLang;
 
 		const to = languagesByCode
 			.find(lang => lang.code !== heuristicLang)?.code
-			?? LANGUAGES[languages.secondLanguage].code
+			?? LANGUAGES[languages.targetLanguage].code
 
-		return {firstLanguage:from, secondLanguage:to};
+		return {sourceLanguage:from, targetLanguage:to};
 	}
 
 	return {
-		firstLanguage:"AUTO",
-		secondLanguage:languages.secondLanguage
+		sourceLanguage:"AUTO",
+		targetLanguage:languages.targetLanguage
 	}
 }

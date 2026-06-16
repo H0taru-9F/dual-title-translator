@@ -2,7 +2,6 @@ import {LangCode, Script} from "./types";
 
 export default function detectLanguageHeuristic(text:string, script:Script):LangCode {
 	if (script === 'latin') {
-		if (/[a-z]/.test(text)) return 'EN';
 		if (/[äöüß]/.test(text)) return 'DE';
 		if (/[éèêëàâçîôûùœ]/.test(text)) return 'FR';
 		if (/[ąćęłńóśżź]/.test(text)) return 'PL';
@@ -22,6 +21,7 @@ export default function detectLanguageHeuristic(text:string, script:Script):Lang
 		if (/[ėįųū]/.test(text)) return 'LT';
 		if (/[āēīōū]/.test(text)) return 'LV';
 		if (/[ăâêôơư]/.test(text)) return 'VI';
+		if (/[a-z]/.test(text)) return 'EN';
 	}
 	else if (script === 'cyrillic') {
 		if (/[іїєґ]/.test(text)) return 'UK';
