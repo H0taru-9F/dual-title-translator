@@ -1,10 +1,10 @@
 import {titleRenameProps} from "./titleRename";
 import {Notice} from "obsidian";
 import languageDetect from "./language-detect";
+import deeplTranslate from "./deeplTranslate";
+import {LangCode} from "./language-detect/types";
 
 type textRenameProps = Omit<titleRenameProps, "setRenaming">;
-
-
 
 export async function textRename({app, settings, saveSettings}:textRenameProps) {
 	const editor = app.workspace.activeEditor?.editor
@@ -33,28 +33,77 @@ export async function textRename({app, settings, saveSettings}:textRenameProps) 
 		return;
 	}
 
-	const MAX_ITEMS = 50;
-	const batches = [];
+	const groupedByLang: Record<string, { sourceLang: LangCode | "AUTO", targetLang: LangCode, texts: string[], coords: any[] }> = {};
 
+	for (const match of matches) {
+		const text = match[1]
 
-	for (let i = 0; i < matches.length; i += MAX_ITEMS) {
-		const chunk = matches.slice(i, i + MAX_ITEMS);
+		const insertOffset =  (match.index ?? 0) + match[0].length - 1;
+		const position = editor.offsetToPos(insertOffset);
 
-		const textBatch = chunk.map(match => match[1]);
-		const coordinateBatch = chunk.map(match => editor.offsetToPos(match.index ?? 0));
-		const languageBatch = chunk.map(match => languageDetect(match[1],settings.selectedLanguages));
+		const detectedLanguage = languageDetect(text, settings.selectedLanguages);
 
-		batches.push({
-			texts: textBatch,
-			coords: coordinateBatch,
-			languages: languageBatch
-		});
+		const pairKey = `${detectedLanguage.sourceLanguage}_${detectedLanguage.targetLanguage}`;
+
+		if (!groupedByLang[pairKey]) {
+			groupedByLang[pairKey] = {
+				sourceLang: detectedLanguage.sourceLanguage,
+				targetLang: detectedLanguage.targetLanguage,
+				texts: [],
+				coords: []
+			};
+		}
+
+		groupedByLang[pairKey].texts.push(text);
+		groupedByLang[pairKey].coords.push(position);
 
 	}
 
-	// for (const batch of batches) {
+
+	const MAX_ITEMS = 50;
+	const batches = [];
+
+	for (const [_, data] of Object.entries(groupedByLang)) {
+		for (let i = 0; i < data.texts.length; i += MAX_ITEMS) {
+			batches.push({
+				sourceLanguage: data.sourceLang,
+				targetLanguage: data.targetLang,
+				texts: data.texts.slice(i, i + MAX_ITEMS),
+				coords: data.coords.slice(i, i + MAX_ITEMS)
+			});
+		}
+	}
 
 	console.log(batches)
+
+	for (let i = batches.length - 1; i >= 0; i--) {
+		const batch = batches[i];
+
+		try {
+			const translatedData = await deeplTranslate({
+				text: batch.texts,
+				targetLang: batch.targetLanguage,
+				sourceLang: batch.sourceLanguage,
+				apiKey: settings.api
+			});
+
+			if(Array.isArray(translatedData)){
+
+				for (let j = translatedData.length - 1; j >= 0; j--) {
+					const translatedText = translatedData[j];
+					const position = batch.coords[j];
+
+					const textToInsert = ` ${separator} ${translatedText}`;
+
+					editor.replaceRange(textToInsert, position);
+				}
+			}
+
+		}catch (error){
+			console.error(error)
+			new Notice('Failed to translate!');
+		}
+	}
 
 	if (separator && !settings.historySeparators.includes(separator)) {
 		settings.historySeparators.push(separator);

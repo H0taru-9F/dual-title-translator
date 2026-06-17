@@ -1,15 +1,25 @@
-import {App, Notice, Plugin, PluginSettingTab, Setting, TFile,} from 'obsidian';
+import {App, Editor, Notice, Plugin, PluginSettingTab, Setting, TFile,} from 'obsidian';
 import {titleRename} from "./src/titleRename";
 import {LangCode} from "./src/language-detect/types";
 import {LANGUAGES} from "./src/language-detect/constants";
 import notTranslated from "./src/utils/notTranslated";
 import {FolderSuggest} from "./src/utils/FolderSuggest";
 import {textRename} from "./src/textRename";
+import languageDetect from "./src/language-detect";
+import deeplTranslate from "./src/deeplTranslate";
 
 export type LanguagesCode = {
 	sourceLanguage: LangCode | "AUTO";
 	targetLanguage: LangCode;
 }
+
+type wrappersForText = {
+		isActive: boolean,
+		show: string,
+		open: string,
+		close: string,
+}
+
 
 export interface DualTitleTranslatorSettings {
 	api: string;
@@ -18,7 +28,29 @@ export interface DualTitleTranslatorSettings {
 	historySeparators: string[];
 	selectedLanguages: LanguagesCode;
 	isAutoTitleTranslate:boolean;
+	wrapperForText: wrappersForText[]
 }
+
+const WRAPPERS:wrappersForText[] = [
+	{
+		isActive: true,
+		show: "( )",
+		open: "(",
+		close: ")",
+	},
+	{
+		isActive: false,
+		show: "{ }",
+		open: "{",
+		close: "}",
+	},
+	{
+		isActive: false,
+		show: "' '",
+		open: "'",
+		close: "'",
+	},
+]
 
 const DEFAULT_SETTINGS: DualTitleTranslatorSettings = {
 	api: "",
@@ -30,6 +62,7 @@ const DEFAULT_SETTINGS: DualTitleTranslatorSettings = {
 		targetLanguage: "EN",
 	},
 	isAutoTitleTranslate: true,
+	wrapperForText: WRAPPERS
 }
 
 export default class DualTitleTranslator extends Plugin {
@@ -60,6 +93,42 @@ export default class DualTitleTranslator extends Plugin {
 				}
 			})
 		);
+
+		this.addCommand({
+			id: 'selected-text-translate',
+			name: 'Translate selected text',
+			editorCallback: async (editor: Editor) => {
+				const selectedText = editor.getSelection();
+				if (!selectedText) {
+					new Notice('Please select some text to translate.');
+					return;
+				}
+				const detectedLanguage = languageDetect(selectedText, this.settings.selectedLanguages);
+				const translatedText = await deeplTranslate({
+					text: selectedText,
+					targetLang: detectedLanguage.targetLanguage,
+					sourceLang: detectedLanguage.sourceLanguage,
+					apiKey: this.settings.api
+				});
+				if (Array.isArray(translatedText)) return
+				const toPos = editor.getCursor('to');
+				const fromPos = editor.getCursor('from');
+
+				const activeWrapper = this.settings.wrapperForText.find((wrapper: any) => wrapper.isActive === true);
+
+				if (!activeWrapper) return;
+
+				const newText = ` ${this.settings.separator} ${translatedText}${activeWrapper.close}`;
+
+				if (!this.settings.historySeparators.includes(this.settings.separator)) {
+					this.settings.historySeparators.push(this.settings.separator);
+					await this.saveSettings();
+				}
+
+				editor.replaceRange(newText, toPos);
+				editor.replaceRange(activeWrapper.open,fromPos)
+			}
+		})
 
 		this.addCommand({
 			id: 'title-translate',
@@ -226,6 +295,24 @@ class DualTitleTranslatorSettingTab extends PluginSettingTab {
 					this.plugin.settings.isAutoTitleTranslate = value;
 					await this.plugin.saveSettings();
 				}));
+
+		new Setting(containerEl)
+			.setName('Wrapper for text')
+			.setDesc('Select wrapper which will be used for translated text')
+			.addDropdown(dropdown => {
+				this.plugin.settings.wrapperForText.forEach((wrapper) => {
+					dropdown.addOption(wrapper.show, wrapper.show);
+				})
+
+				dropdown
+					.setValue(this.plugin.settings.wrapperForText.find(wrapper => wrapper.isActive)?.show ?? "")
+					.onChange(async (value) => {
+						this.plugin.settings.wrapperForText.forEach((wrapper) => {
+							wrapper.isActive = (wrapper.show === value);
+						});
+						await this.plugin.saveSettings();
+					});
+			});
 
 		let newFolderPath = "";
 		new Setting(containerEl)
