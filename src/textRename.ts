@@ -17,7 +17,11 @@ export async function textRename({app, settings, saveSettings}:textRenameProps) 
 		.map(char => char.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&'))
 		.join('');
 
-	const brackets = { open: '\\(', close: '\\)' };
+	const activeWrapper = settings.wrapperForText.find((wrapper: any) => wrapper.isActive === true);
+
+	if (!activeWrapper) return;
+
+	const brackets = { open: `\\${activeWrapper.open}`, close: `\\${activeWrapper.close}` };
 
 	const regex = new RegExp(
 		`${brackets.open}([^${excludeCharsStr}${brackets.close}]+)${brackets.close}`,
